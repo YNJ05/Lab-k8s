@@ -1,0 +1,56 @@
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: lab-alert-rules
+  namespace: monitoring
+  labels:
+    release: kube-monitor
+spec:
+  groups:
+    - name: lab.rules
+      rules:
+        - alert: NginxDown
+          expr: nginx_up == 0
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "NGINX is not reachable by its exporter"
+            description: "nginx_up has been 0 for more than 30 seconds."
+
+        - alert: NodeAppNoReplicasAvailable
+          expr: kube_deployment_status_replicas_available{namespace="default",deployment="lab-nodejs-deployment"} < 1
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "The Node.js application has no available replica"
+            description: "The Node.js deployment has no available replicas."
+
+        - alert: NodeAppHighErrorRate
+          expr: sum(rate(http_requests_total{status_code=~"5.."}[1m])) / clamp_min(sum(rate(http_requests_total[1m])), 0.001) > 0.1
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "More than 10% of requests fail"
+            description: "The application error ratio is above 10%."
+
+        - alert: NodeAppSlowRequests
+          expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[1m]))) > 1
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "95th percentile latency is above 1 second"
+            description: "The application p95 latency is above one second."
+
+        - alert: PodRestartingFrequently
+          expr: increase(kube_pod_container_status_restarts_total{namespace="default"}[5m]) > 2
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "A Pod is restarting repeatedly"
+            description: "A container has restarted more than twice in five minutes."
